@@ -12,3 +12,10 @@ def signal2data(signal):
     # data = librosa.feature.mfcc(signal)
     return data[:800]
 
+def fit_size(signal):
+    signal = signal[:54200]
+    if len(signal) > 44200:
+        signal = signal[len(signal) - 44100:]
+    else:
+        signal = np.concatenate((signal, np.zeros(44100 - len(signal))))
+    return signal
