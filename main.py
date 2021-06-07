@@ -4,7 +4,14 @@ import numpy as np
 import sounddevice as sd
 import librosa
 from keras import models
-from utils import signal2data, fit_size, data_dir
+
+def fit_size(signal):
+    signal = signal[:54200]
+    if len(signal) > 44200:
+        signal = signal[len(signal) - 44200:]
+    else:
+        signal = np.concatenate((signal, np.zeros(44200 - len(signal))))
+    return signal
 
 sample_rate = 44100
 duration = 0.0625
@@ -12,13 +19,14 @@ chunk = int(duration * sample_rate)
 
 
 if __name__ == "__main__":
-    model = models.load_model(os.path.join(data_dir, "model.h5"))
+    model = models.load_model("model.h5")
 
     if len(sys.argv) == 2:
+        print("start offline")
         path = sys.argv[1]
         signal, _ = librosa.load(path, sr=sample_rate)
         signal = fit_size(signal)
-        data = signal2data(signal)
+        data = librosa.stft(signal)
         result = model.predict(np.array([data]))
 
         if result[0][0] > 0.99:
@@ -29,6 +37,7 @@ if __name__ == "__main__":
             print("MUTE")
 
     else:
+        print("start online")
         signal = np.zeros((chunk * 16,), dtype=np.float32)
         stream = sd.InputStream(samplerate=sample_rate, channels=1, dtype=np.float32)
         stream.start()
@@ -40,11 +49,13 @@ if __name__ == "__main__":
                 mic = stream.read(chunk)[0].reshape(chunk)
                 sd.wait()
                 signal = np.concatenate((mic, signal[chunk:]))
-                data = signal2data(signal)
-                result = model.predict(np.array([data]))
+                data = librosa.stft(signal)
+                data = np.array([data])
+                data = data[..., None]
+                result = model.predict(data)
                 if(result[0][0] >= 0.9):
                     Y = Y + 1
-                if(result[0][0] <= 0.1):
+                if(result[0][1] >= 0.9):
                     N = N + 1
             if Y >= 4 and N >= 4:
                 if Y > N:
